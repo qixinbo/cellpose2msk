@@ -5,10 +5,20 @@ from cupyx.scipy import ndimage as ndimg
 import numpy as np
 from scipy import ndimage as ndimg
 
-def flow2msk(flow, prob, grad=1.0, area=150, volume=500):
+def flow2msk(flow, cell_prob, prob=0.0, grad=0.4, area=20, volume=100):
     shp, dim = flow.shape[:-1], flow.ndim - 1
     l = np.linalg.norm(flow, axis=-1)
-    flow /= l.reshape(shp+(1,));flow[l<grad] = 0
+    flow /= l.reshape(shp+(1,))
+    flow_copy = flow.copy()
+
+    # cell probablity threshold	
+    sigmoid = 1/(1+np.exp(-1*cell_prob))
+    flow[sigmoid<prob] = 0
+
+    # flow magnitude threshold
+    mag = abs(np.amax(flow_copy, axis=-1)/5.0)
+    flow[mag > grad] = flow_copy[mag > grad]
+
     ss = ((slice(None),) * (dim) + ([0,-1],)) * 2
     for i in range(dim):flow[ss[dim-i:-i-2]+(i,)]=0
     sn = np.sign(flow); sn *= 0.5; flow += sn;
@@ -46,7 +56,7 @@ if __name__ == '__main__':
     mask, flow, style, diam = model.eval(
         img, diameter=30, rescale=None, channels=[0,0])
     start = time()
-    water, core, msk = flow2msk(flow[1].transpose(1,2,0), None, 1.0, 20, 100)
+    water, core, msk = flow2msk(flow[1].transpose(1,2,0), flow[2])
     print('flow to mask cost:', time()-start)
     ax1, ax2, ax3, ax4, ax5, ax6 =\
         [plt.subplot(230+i) for i in (1,2,3,4,5,6)]
